@@ -1,3 +1,5 @@
+"""Agent 核心循环 — 支持多轮对话 + Plan/Execute"""
+
 import json
 
 from .config import MAX_STEPS, STUCK_LIMIT, CONTEXT_LIMIT
@@ -25,24 +27,36 @@ class AgentLoop:
         self.client = LLMClient()
 
     def _truncate(self, messages):
+        """上下文截断"""
         while self.client.count_tokens(messages) > CONTEXT_LIMIT and len(messages) > 3:
             messages = [messages[0]] + messages[2:]
         return messages
 
-    def run(self, user_input, on_step=None):
+    def run(self, user_input, on_step=None, existing_messages=None, plan_only=False):
         """
         执行一轮用户请求。
 
         Args:
             user_input: 用户输入
-            on_step: 回调函数 on_step(step_type, data)
-                step_type: "tool_call" | "tool_result" | "text" | "stuck" | "limit"
+            on_step: 回调 on_step(step_type, data)
+            existing_messages: 上一轮的 messages 列表（多轮对话）
+            plan_only: True = 只输出文字计划，不调工具（Plan 模式第一阶段）
+
+        Returns:
+            (steps, messages)
+            steps: 步骤列表
+            messages: 更新后的 messages 列表（传回给下一轮使用）
         """
         steps = []
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_input},
-        ]
+
+        if existing_messages:
+            messages = list(existing_messages)
+            messages.append({"role": "user", "content": user_input})
+        else:
+            messages = [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_input},
+            ]
 
         last_tool = None
         stuck = 0
@@ -50,18 +64,22 @@ class AgentLoop:
 
         while count < MAX_STEPS:
             messages = self._truncate(messages)
-            response = self.client.chat(messages, tools=TOOLS)
+
+            # Plan only mode: 不给 tools，AI 只能文字回答
+            tools_arg = None if plan_only else TOOLS
+            response = self.client.chat(messages, tools=tools_arg)
 
             if response.type == "text":
                 steps.append({"type": "text", "content": response.content})
                 if on_step:
                     on_step("text", {"content": response.content})
+                messages.append({"role": "assistant", "content": response.content})
                 break
 
+            # tool call
             count += 1
             name = response.name
 
-            # stuck detection
             if name == last_tool:
                 stuck += 1
             else:
@@ -75,7 +93,6 @@ class AgentLoop:
                     on_step("stuck", {"content": msg, "tool": name})
                 break
 
-            # append assistant message
             messages.append({
                 "role": "assistant", "content": None,
                 "tool_calls": [{
@@ -95,10 +112,15 @@ class AgentLoop:
 
             messages.append({"role": "tool", "tool_call_id": response.id, "content": result})
 
+            # 如果 AI 的最后一条是 assistant 消息但没有 tool_calls（即刚追加的），
+            # 说明 AI 刚做了文字回复，可以退出
+            if messages[-1]["role"] == "assistant" and messages[-1].get("content"):
+                break
+
         if count >= MAX_STEPS:
             msg = f"Reached max steps ({MAX_STEPS})"
             steps.append({"type": "text", "content": msg})
             if on_step:
                 on_step("limit", {"content": msg})
 
-        return steps
+        return steps, messages
