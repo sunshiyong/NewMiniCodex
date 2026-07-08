@@ -62,9 +62,13 @@ class LLMClient:
             print(f"  [API Error] {e}")
             return None
 
-        choice = data["choices"][0]
-        reason = choice.get("finish_reason", "stop")
-        msg = choice["message"]
+        try:
+            choice = data["choices"][0]
+            reason = choice.get("finish_reason", "stop")
+            msg = choice["message"]
+        except (KeyError, IndexError) as e:
+            print(f"  [API Parse Error] {e}, raw: {str(data)[:200]}")
+            return None
 
         if reason == "stop":
             return TextResponse(content=msg.get("content", "") or "")

@@ -173,3 +173,6 @@ class MiniCodexTUI:
                 self.add_msg("system", "Please continue...")
             else:
                 self.add_msg("system", "Done")
+
+if __name__ == "__main__":
+    MiniCodexTUI().run()

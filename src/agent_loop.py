@@ -27,9 +27,16 @@ class AgentLoop:
         self.client = LLMClient()
 
     def _truncate(self, messages):
-        """上下文截断"""
+        """上下文截断，保持 assistant/tool 消息对完整性"""
         while self.client.count_tokens(messages) > CONTEXT_LIMIT and len(messages) > 3:
-            messages = [messages[0]] + messages[2:]
+            # 若 messages[1] 是含 tool_calls 的 assistant，必须连同后面的 tool result 一起删
+            if (messages[1].get("role") == "assistant" and
+                    messages[1].get("tool_calls") and
+                    len(messages) > 3 and
+                    messages[2].get("role") == "tool"):
+                messages = [messages[0]] + messages[3:]
+            else:
+                messages = [messages[0]] + messages[2:]
         return messages
 
     def run(self, user_input, on_step=None, existing_messages=None, plan_only=False):

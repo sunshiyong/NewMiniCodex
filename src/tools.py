@@ -51,7 +51,13 @@ def run_command(command, workdir="."):
     if not safe:
         return json.dumps({"error": reason})
     try:
-        cwd = str((SANDBOX_DIR / workdir if workdir != "." else SANDBOX_DIR).resolve())
+        if workdir == ".":
+            cwd = str(SANDBOX_DIR.resolve())
+        else:
+            resolved = (SANDBOX_DIR / workdir).resolve()
+            if not str(resolved).startswith(str(SANDBOX_DIR.resolve())):
+                return json.dumps({"error": f"Path escape: {workdir}"})
+            cwd = str(resolved)
         r = subprocess.run(command, shell=True, cwd=cwd, capture_output=True, text=True, timeout=30)
         return json.dumps({"command": command, "return_code": r.returncode, "stdout": r.stdout[:RESULT_TRUNCATE], "stderr": r.stderr[:RESULT_TRUNCATE//2]})
     except subprocess.TimeoutExpired:
