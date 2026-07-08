@@ -1,172 +1,167 @@
-# MiniCodex — TUI AI 编程助手 / AI Coding Assistant
+# MiniCodex
+> TUI AI 编程助手 / Terminal AI Coding Assistant
 
-[English](#english) | [中文](#中文)
+<p align="center">
+  <a href="#快速开始">中文</a> •
+  <a href="#quick-start">English</a>
+</p>
 
 ---
 
-<a id="中文"></a>
-
-## MiniCodex — TUI AI 编程助手
-
-终端中的 AI 编程助手，Rich TUI 交互界面。用自然语言告诉它你想写什么，AI 在安全的沙盒中自动读写文件、执行命令。
-
-### 快速开始
+## 快速开始 / Quick Start
 
 ```bash
-# 安装依赖
-python -m venv .venv
-.venv\Scripts\activate
+# 安装依赖 / Install dependencies
 pip install httpx rich python-dotenv
 
-# 配置 API Key
-cp .env.example .env
-# 编辑 .env，填入你的 DeepSeek API Key
+# 配置 / Configure
+# 编辑 .env，填入 DEEPSEEK_API_KEY
+# Edit .env with your DeepSeek API key
 
-# 运行
+# 运行 / Run
 python app.py
 ```
 
-### 功能特性
+---
 
-| 特性 | 说明 |
-|------|------|
-| **TUI 界面** | Rich 终端界面，消息分色显示 |
-| **双模式** | Execute 模式（直接执行） / Plan 模式（先出方案，确认后执行） |
-| **多轮对话** | 同一会话中持续追加需求，AI 保留上下文 |
-| **安全沙盒** | 所有写操作和命令执行限制在 `sandbox/` 目录 |
-| **外部参考** | AI 可以读取你电脑上的任意文件做参考（只读） |
+## 功能 / Features
 
-消息颜色：
-- 🟢 **绿色** — 用户输入 / 工具执行结果
-- 🔵 **蓝色** — AI 回答
-- 🟡 **黄色** — 工具调用（含参数）
-- 🔴 **红色** — 错误信息
-- 🟣 **紫色** — 系统消息
+| 中文 | English |
+|------|---------|
+| **TUI 界面** — Rich 分色显示，消息类型一目了然 | **TUI Interface** — Color-coded Rich terminal UI |
+| **Execute 模式** — 直接执行 | **Execute Mode** — Direct execution |
+| **Plan 模式** — AI 先出方案，确认后执行 | **Plan Mode** — AI proposes plan, confirm before execute |
+| **多轮对话** — 同一会话保持上下文 | **Multi-turn** — Persistent conversation context |
+| **安全沙盒** — 所有写操作限制在 sandbox/ | **Sandbox** — All writes confined to sandbox/ |
+| **外部参考** — AI 可读取任意文件（只读） | **External Ref** — AI reads any file (read-only) |
 
-### 命令
+消息颜色 / Message colors：
+🟢 用户/结果 (user/result)  🔵 AI 回答 (AI response)  🟡 工具调用 (tool call)  🔴 错误 (error)
 
-| 命令 | 功能 |
-|------|------|
-| `/plan` 或 `/p` | 切换到 Plan 模式 |
-| `/exec` 或 `/e` | 切换到 Execute 模式 |
-| `/clear` 或 `/c` | 清除屏幕和对话历史 |
-| `/help` 或 `/h` | 显示帮助 |
-| `exit` 或 `quit` | 退出 |
+---
 
-### Plan 模式 vs Execute 模式
+## 命令 / Commands
 
-**Execute 模式（默认）：**
-AI 收到需求后直接调用工具执行，步骤实时显示在界面上。
+| 命令 | 功能 | Function |
+|------|------|----------|
+| `/plan` / `/p` | 切换到 Plan 模式 | Switch to Plan mode |
+| `/exec` / `/e` | 切换到 Execute 模式 | Switch to Execute mode |
+| `/clear` / `/c` | 清除屏幕和对话 | Clear screen & conversation |
+| `/help` / `/h` | 显示帮助 | Show help |
+| `exit` / `quit` | 退出 | Exit |
 
-**Plan 模式：**
-1. AI 先输出执行方案（不调任何工具）
-2. 用户审阅方案，按 Y 确认或 N 取消
-3. 确认后 AI 按方案执行
+---
 
-在 Plan 模式下，AI 调用时 `tools` 参数设为 `None`，AI 只能输出文字，无法调用工具。确认后第二阶段的调用才带上 `tools` 参数。
+## Plan 模式原理 / How Plan Mode Works
 
-### 项目结构
+**Execute 模式（默认）：** AI 直接调工具执行。
+**Plan 模式：** 两阶段执行。
 
 ```
-NewMiniCodex/
-  app.py              TUI 入口（Rich）
-  src/
-    config.py         配置（.env + 常量）
-    llm_client.py     LLM 客户端（httpx + 自动重试 + 模型降级）
-    tools.py          工具系统（read_file / write_file / run_command）
-    agent_loop.py     Agent 循环（多轮对话 + Plan/Execute + 卡住检测）
-  sandbox/            安全沙盒目录
-  tests/              单元测试
-    test_tools.py     工具测试（10 个用例）
-    test_llm_client.py LLM 客户端测试（9 个用例）
-  scenarios/          场景测试
-    test_create_and_run.py        创建并运行脚本
-    test_external_reference.py    读取外部文件做参考
-    test_multi_file_project.py    创建多文件项目
+用户输入 → Phase 1: AI 只输出方案（tools=None，无法调工具）
+                    → 用户确认 Y/N
+                    → Phase 2: AI 基于方案执行（带上 tools 参数）
 ```
 
-### 架构
+关键代码 / Key code:
+```python
+# plan_only=True → 不传 tools，AI 只能说话
+tools_arg = None if plan_only else TOOLS
+response = self.client.chat(messages, tools=tools_arg)
+```
+
+---
+
+## 架构 / Architecture
 
 ```
 app.py (TUI) → agent_loop.py → llm_client.py → DeepSeek API
                               → tools.py → sandbox/
 ```
 
-调用链：
-1. 用户在 TUI 输入需求
-2. `app.py` 调用 `agent_loop.run()`，传入 `on_step` 回调
-3. Agent 循环：调 LLM → 解析响应 → 执行工具 → 结果送回 LLM → 继续
-4. 每一步通过回调实时显示在 TUI 上
-5. AI 输出最终结果后，TUI 显示「满意吗？」确认
+调用链 / Call chain：
+1. TUI 输入 → `agent_loop.run()` 带 `on_step` 回调
+2. while 循环：LLM → 解析 → 执行工具 → 结果送回 LLM → 继续
+3. 每一步通过回调实时显示 / Each step displayed via callback
+4. AI 完成后问「满意吗？」 / Prompt "Satisfied?" after completion
 
-### 安全机制
+### 模块职责 / Modules
 
-- **路径安全**：所有文件操作先 `resolve()` 成绝对路径，再检查前缀是否在沙盒内
-- **命令黑名单**：拦截 `rm -rf`、`format`、`shutdown` 等危险命令（Windows + Linux）
-- **超时保护**：命令执行最长 30 秒
-- **卡住检测**：连续 3 次调用同一工具 → 自动停止
+| 模块 | 职责 | Responsibility |
+|------|------|----------------|
+| `app.py` | TUI 入口，Rich 界面 | TUI entry point |
+| `agent_loop.py` | Agent while 循环 + 卡住检测 | Agent loop + stuck detection |
+| `llm_client.py` | httpx 调 DeepSeek + 自动重试 | LLM client + auto-retry |
+| `tools.py` | 文件读写 + 命令执行 + 安全校验 | File I/O + commands + security |
+| `config.py` | 配置管理 | Configuration |
 
-### 技术选型
+---
 
-| 组件 | 选择 | 理由 |
-|------|------|------|
-| LLM API | DeepSeek (OpenAI 兼容) | 已有 API Key，支持 Function Calling |
-| HTTP | httpx | 0 依赖，免安装 |
-| TUI | rich | 系统已有，零额外依赖 |
-| 模型定义 | dataclass | Python 标准库，代替 pydantic |
-| 测试 | unittest | Python 标准库，代替 pytest |
+## 安全机制 / Security
 
-### 测试
+| 机制 | 说明 | Details |
+|------|------|---------|
+| 路径安全 | `resolve()` 后检查是否在沙盒内 | Path verified after resolve |
+| 命令黑名单 | 拦截 rm -rf / format / shutdown 等 | Blocked dangerous commands |
+| 超时 | 命令最长 30 秒 | 30s timeout |
+| 卡住检测 | 连续 3 次同名工具 → 自动停止 | 3x same tool → auto-stop |
+
+---
+
+## 项目结构 / Project Structure
+
+```
+NewMiniCodex/
+  app.py              TUI 入口
+  src/
+    config.py         配置（.env）
+    llm_client.py     LLM 客户端
+    tools.py          工具系统
+    agent_loop.py     Agent 循环
+  sandbox/            沙盒目录
+  tests/              单元测试（19 个用例）
+    test_tools.py
+    test_llm_client.py
+  scenarios/          场景测试（3 个）
+    test_create_and_run.py
+    test_external_reference.py
+    test_multi_file_project.py
+```
+
+---
+
+## 测试 / Testing
 
 ```bash
-# 运行所有单元测试
+# 单元测试 / Unit tests（19/19 ✅）
 python -m unittest discover tests -v
 
-# 运行场景测试
+# 场景测试 / Scenario tests（3/3 ✅）
 python scenarios/test_create_and_run.py
 python scenarios/test_external_reference.py
 python scenarios/test_multi_file_project.py
 ```
 
-### 依赖
+---
 
-- `httpx` — HTTP 客户端（调 DeepSeek API）
-- `rich` — 终端 UI 框架
-- `python-dotenv` — 环境变量加载
+## 技术选型 / Tech Stack
+
+| 组件 | 选择 | Why |
+|------|------|-----|
+| LLM API | DeepSeek (OpenAI 兼容) | 已有 API Key |
+| HTTP 客户端 | httpx | 零额外依赖 |
+| TUI 框架 | rich | 系统已有 |
+| 数据模型 | dataclass | 标准库，代替 pydantic |
+| 测试框架 | unittest | 标准库，代替 pytest |
 
 ---
 
-<a id="english"></a>
+## 依赖 / Dependencies
 
-## MiniCodex — TUI AI Coding Assistant (English)
+- `httpx` — HTTP client for DeepSeek API
+- `rich` — Terminal UI framework
+- `python-dotenv` — Environment variable loading
 
-A terminal-based AI coding assistant with a rich TUI interface powered by Rich. Describe what you want to build in natural language, and the AI reads/writes files and runs commands inside a safe sandbox.
-
-[Features | Commands | Architecture | Testing — see Chinese section above for details]
-
-### Quick Start
-
-```bash
-python -m venv .venv
-.venv\Scripts\activate
-pip install httpx rich python-dotenv
-# Edit .env with your DeepSeek API key
-python app.py
-```
-
-### Test Results
-
-```
-Unit tests: 19/19 passed
-  test_tools.py       — 10 tests (write/read/overwrite/escape/absolute-path/command/nested)
-  test_llm_client.py  — 9 tests (models/response/token-counting)
-
-Scenario tests: 3/3 passed
-  Create and run Fibonacci script
-  Read external file as reference, create new file
-  Create multi-file project and execute
-```
-
-### License
+## License
 
 MIT
